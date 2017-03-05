@@ -1,0 +1,54 @@
+---
+
+# tasks file for ansible-dockerized-owncloud
+- hosts : kimsufi
+  vars_files :
+    - vars/external_vars.yml
+
+  tasks:
+
+  - name: "Launch database container"
+
+    docker:
+
+      name: db_owncloud
+
+      image: mariadb
+
+      env:
+
+        MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
+
+  - name: "Create the data volume container in which Owncloud data will be stored"
+
+    docker:
+
+      name: owncloud_data
+
+      image: busybox
+
+      state: present
+
+      volumes:
+
+        - /var/www/html
+
+  - name: "Launch owncloud container"
+
+    docker:
+
+      name: owncloud
+
+      image: owncloud
+
+      links:
+
+        - db_owncloud:mysql
+
+      volumes_from:
+
+        - owncloud_data
+
+      ports:
+
+        - 8080:80
