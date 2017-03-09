@@ -7,48 +7,62 @@
 
   tasks:
 
-  - name: "Launch database container"
-
-    docker:
-
-      name: db_owncloud
-
-      image: mariadb
-
-      env:
-
-        MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
-
-  - name: "Create the data volume container in which Owncloud data will be stored"
-
-    docker:
-
-      name: owncloud_data
-
-      image: busybox
-
+  - name: "Pull the docker image : smashwilson/lets-nginx"
+    docker_image:
+      name: smashwilson/lets-nginx
       state: present
-
+      tag: latest
+      
+  - name: "Pull the docker image : mariadb"
+    docker_image:
+      name: mariadb
+      state: present
+      tag: latest
+  
+  - name: "create the data volume container in which Owncloud data will be stored"
+    docker:
+      name: owncloud_data
+      image: busybox
+      state: present
       volumes:
-
         - /var/www/html
 
-  - name: "Launch owncloud container"
-
+  - name: "create the volume container "{{ item }}""
     docker:
+      name: {{ item }}
+      image: busybox
+      state: present
+      volumes:
+        - /etc/letsencrypt
 
+  with_items: "{{ volumes_to_create }}"
+        
+  - name: "create the data volume container in which the letscrypt certificates wil be stored"
+    docker:
+      name: letsencrypt
+      image: busybox
+      state: present
+      volumes:
+        - /var/www/html
+        
+   - name: "launch database container"
+    docker:
+      name: db_owncloud
+      image: mariadb
+      env:
+        MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
+
+  - name: "Launch owncloud container"
+    docker:
       name: owncloud
-
       image: owncloud
-
       links:
-
         - db_owncloud:mysql
-
       volumes_from:
-
         - owncloud_data
-
       ports:
-
         - 8080:80
+        
+
+  
+  - name : 
