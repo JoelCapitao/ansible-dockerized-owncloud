@@ -1,0 +1,11 @@
+---
+
+- hosts : kimsufi
+  vars_files:
+    - vars/external_vars.yml
+
+  tasks:
+
+  name: "backup the owncloud database"
+  command: docker run --rm --volumes-from {{ owncloud_dbname }} -v $(pwd):/backup ubuntu tar cvf /backup/backup.tar /dbdata
+

@@ -7,17 +7,25 @@
 
   tasks:
 
-  - name: "Pull the docker image : smashwilson/lets-nginx"
+  - name: "Pull the docker images"
     docker_image:
-      name: smashwilson/lets-nginx
+      name: "{{ item }}"
       state: present
       tag: latest
-      
-  - name: "Pull the docker image : mariadb"
-    docker_image:
-      name: mariadb
-      state: present
-      tag: latest
+    with_items : "{{ docker_images_to_pull }}"
+
+
+#  - block:
+#    - name: "Check if volumes exist"
+#      command: docker volume inspect owncloud_data
+#      register: myvolume_exists
+#      failed_when: false
+#
+#    - name: create myvolume
+#      command: docker volume create --name owncloud_data -v /var/www/html owncloud /bin/true
+#      when: myvolume_exists|failed
+#    tags:
+#      - volume
   
   - name: "create the data volume container in which Owncloud data will be stored"
     docker:
@@ -27,42 +35,67 @@
       volumes:
         - /var/www/html
 
-  - name: "create the volume container "{{ item }}""
-    docker:
-      name: {{ item }}
-      image: busybox
-      state: present
-      volumes:
-        - /etc/letsencrypt
-
-  with_items: "{{ volumes_to_create }}"
-        
-  - name: "create the data volume container in which the letscrypt certificates wil be stored"
+  - name: "create the data volume in which the letsencrypt certificates will be stored "
     docker:
       name: letsencrypt
       image: busybox
       state: present
       volumes:
-        - /var/www/html
-        
-   - name: "launch database container"
-    docker:
-      name: db_owncloud
-      image: mariadb
-      env:
-        MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
+        - /etc/letsencrypt
 
-  - name: "Launch owncloud container"
+  - name: "create the data volume in which the letscrypt backups wil be stored"
+    docker:
+      name: letsencrypt-backup
+      image: busybox
+      state: present
+      volumes:
+        - /var/lib/letsencrypt
+
+  - name: "create the data volume in which we will cach Diffie-Hellmann parameters"
+    docker:
+      name: dhparam-cache
+      image: busybox
+      state: present
+      volumes:
+        - /cache
+
+  - name: "launch database container"
+    docker:
+      name: "{{ owncloud_dbname }}"
+      image: mariadb
+      state: started
+      env:
+        MYSQL_ROOT_PASSWORD: "{{ owncloud_db_root_password }}"
+
+  - name: "launch owncloud container"
     docker:
       name: owncloud
       image: owncloud
+      state: started
+      net: http_network
       links:
         - db_owncloud:mysql
       volumes_from:
         - owncloud_data
       ports:
-        - 8080:80
-        
+        - 80
 
-  
-  - name : 
+  - name: "launch nginx container with letsencrypt certificates"
+    docker:
+      name: lets-nginx
+      image: smashwilson/lets-nginx
+      state: restarted
+      net: http_network
+      env:
+        EMAIL: "{{ email }}"
+        DOMAIN: "{{ domain }}"
+        UPSTREAM: "{{ upstream }}"
+        STAGING: "{{ is_staging }}"
+      ports:
+        - 80:80
+        - 443:443
+      volumes_from:
+        - letsencrypt
+        - letsencrypt-backup
+        - dhparam-cache
+    tags: nginx
