@@ -1,3 +1,24 @@
 ---
-mysql_root_password : test
+
+admin_username : test
+admin_password : test
+
+owncloud_container_name: owncloud
+owncloud_db_root_password : test
+owncloud_dbname : owncloud_db
 data_path : /home/joel/docker-owncloud
+owncloud_data : /var/www/html
+
+letsnginx_image : mylets-nginx
+database_image : mariadb
+owncloud_image : owncloud:9.1
+
+docker_images_to_pull :
+  - "{{ letsnginx_image }}"
+  - "{{ database_image }}"
+  - "{{ owncloud_image }}"
+
+email: joel@capitao.fr
+domain: torrent.capitao.fr;owncloud.capitao.fr
+upstream: transmission:9091;owncloud:80
+is_staging: 0

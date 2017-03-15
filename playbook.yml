@@ -33,7 +33,7 @@
       image: busybox
       state: present
       volumes:
-        - /var/www/html
+        - "{{ owncloud_data }}"
 
   - name: "create the data volume in which the letsencrypt certificates will be stored "
     docker:
@@ -62,28 +62,28 @@
   - name: "launch database container"
     docker:
       name: "{{ owncloud_dbname }}"
-      image: mariadb
+      image: "{{ database_image }}"
       state: started
       env:
         MYSQL_ROOT_PASSWORD: "{{ owncloud_db_root_password }}"
 
   - name: "launch owncloud container"
     docker:
-      name: owncloud
-      image: owncloud
+      name: "{{ owncloud_container_name }}"
+      image: "{{ owncloud_image }}"
       state: started
       net: http_network
       links:
-        - db_owncloud:mysql
+        - owncloud_db:mysql
       volumes_from:
         - owncloud_data
       ports:
-        - 80
+        - 8080:80
 
   - name: "launch nginx container with letsencrypt certificates"
     docker:
       name: lets-nginx
-      image: smashwilson/lets-nginx
+      image: "{{ letsnginx_image }}"
       state: restarted
       net: http_network
       env:
@@ -99,3 +99,15 @@
         - letsencrypt-backup
         - dhparam-cache
     tags: nginx
+
+#  - name: "Change the ownership of the owncloud directory"
+#    shell: docker exec "{{ owncloud_container_name }}" chown -R www-data:www-data "{{ owncloud_data }}"
+#    tags : owner
+#
+#  - name: "Complete the installation "
+#    shell: docker exec --user www-data "{{ owncloud_container_name }}" cd "{{ owncloud_data }}" && php occ maintenance:install --database 'mysql' --data-dir '"{{ owncloud_data }}/data"' --database-name '"{{ owncloud_dbname }}"' --database-user 'root' --database-pass '"{{ owncloud_db_root_password }}"' --database-host '"{{ owncloud_dbname }}"' --admin-user '"{{ admin_username }}"' --admin-pass '"{{ admin_password }}"'
+#    tags: installation
+#
+#  - name: "Set trusted domain"
+#    shell: docker exec --user www-data "{{ owncloud_container_name }}" php occ config:system:set trusted_domains 2 --value=owncloud.capitao.fr
+#    tags: domain
