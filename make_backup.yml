@@ -5,7 +5,37 @@
     - vars/external_vars.yml
 
   tasks:
+    - name: "Create temporary directory"
+      file:
+        path: /tmp/owncloud-backup
+        state: directory
+        mode: 0755
 
-  name: "backup the owncloud database"
-  command: docker run --rm --volumes-from {{ owncloud_dbname }} -v $(pwd):/backup ubuntu tar cvf /backup/backup.tar /dbdata
+    - name: "Backup the owncloud database"
+      shell: "docker run --net http_network --link owncloud_db:mysql \
+          --rm mariadb:latest \
+          sh -c 'exec mysqldump -howncloud_db -P3306 -uroot -p{{ owncloud_db_root_password }} {{ owncloud_dbname }}' > /tmp/owncloud-backup/database_dump.sql"
 
+    - name: "Backup the owncloud data"
+      shell: "docker run --rm --volumes-from owncloud_data -v /tmp/owncloud-backup:/backup busybox tar cvf /backup/data.tar {{ owncloud_data }}/data"
+
+    - name: "Get time"
+      shell: date '+%d-%m-%Y'
+      register: date
+
+    - name: "Make an owncloud archive"
+      shell: tar -czvf /tmp/owncloud-backup_{{ date.stdout }}.tar.gz /tmp/owncloud-backup
+
+    - name: "Download the owncloud archive"
+      synchronize:
+        src: /tmp/owncloud-backup_{{ date.stdout }}.tar.gz
+        dest: /tmp
+        mode: pull
+
+    - name: "Delete the owncloud archive on the remote host"
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/owncloud-backup_{{ date.stdout }}.tar.gz
+        - /tmp/owncloud-backup

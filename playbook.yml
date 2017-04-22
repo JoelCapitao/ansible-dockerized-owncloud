@@ -14,28 +14,18 @@
       tag: latest
     with_items : "{{ docker_images_to_pull }}"
 
-
-#  - block:
-#    - name: "Check if volumes exist"
-#      command: docker volume inspect owncloud_data
-#      register: myvolume_exists
-#      failed_when: false
-#
-#    - name: create myvolume
-#      command: docker volume create --name owncloud_data -v /var/www/html owncloud /bin/true
-#      when: myvolume_exists|failed
-#    tags:
-#      - volume
   
-  - name: "create the data volume container in which Owncloud data will be stored"
+  - name: "Owncloud | Create the data volume container in which Owncloud data will be stored"
     docker:
       name: owncloud_data
       image: busybox
       state: present
+      docker_user: www-data
       volumes:
         - "{{ owncloud_data }}"
+    tags: owncloud
 
-  - name: "create the data volume in which the letsencrypt certificates will be stored "
+  - name: "Lets-nginx | Create the data volume in which the letsencrypt certificates will be stored "
     docker:
       name: letsencrypt
       image: busybox
@@ -43,7 +33,7 @@
       volumes:
         - /etc/letsencrypt
 
-  - name: "create the data volume in which the letscrypt backups wil be stored"
+  - name: "Lets-nginx | Create the data volume in which the letscrypt backups wil be stored"
     docker:
       name: letsencrypt-backup
       image: busybox
@@ -51,7 +41,7 @@
       volumes:
         - /var/lib/letsencrypt
 
-  - name: "create the data volume in which we will cach Diffie-Hellmann parameters"
+  - name: "Lets-nginx | Create the data volume in which we will cach Diffie-Hellmann parameters"
     docker:
       name: dhparam-cache
       image: busybox
@@ -59,15 +49,17 @@
       volumes:
         - /cache
 
-  - name: "launch database container"
+  - name: "Owncloud | Launch database"
     docker:
       name: "{{ owncloud_dbname }}"
       image: "{{ database_image }}"
       state: started
+      net: http_network
       env:
         MYSQL_ROOT_PASSWORD: "{{ owncloud_db_root_password }}"
 
-  - name: "launch owncloud container"
+
+  - name: "Owncloud | Launch application"
     docker:
       name: "{{ owncloud_container_name }}"
       image: "{{ owncloud_image }}"
@@ -79,8 +71,22 @@
         - owncloud_data
       ports:
         - 8080:80
+    tags: owncloud
 
-  - name: "launch nginx container with letsencrypt certificates"
+  - name: "Owncloud | Change ownsership of {{ owncloud_data }}"
+    shell: "docker exec {{ owncloud_container_name }} chown -R www-data:www-data {{ owncloud_data }} /var/www/html"
+
+  - name: "Owncloud | Finish installation"
+    shell: "docker exec --user www-data {{ owncloud_container_name }} php occ maintenance:install --database 'mysql' --data-dir '{{ owncloud_data }}/data' --database-name '{{ owncloud_dbname }}' --database-user 'root' --database-pass '{{ owncloud_db_root_password }}' --database-host '{{ owncloud_dbname }}' --admin-user '{{ admin_username }}' --admin-pass '{{ admin_password }}'"
+    tags: post-install
+
+
+  - name: "Owncloud | Add the trusted domain {{ owncloud_url }}"
+    shell: docker exec --user www-data "{{ owncloud_container_name }}" php occ config:system:set trusted_domains 2 --value={{ owncloud_url }}
+    tags: domain
+
+
+  - name: "Lets-nginx | Launch nginx container with letsencrypt certificates"
     docker:
       name: lets-nginx
       image: "{{ letsnginx_image }}"
@@ -99,15 +105,3 @@
         - letsencrypt-backup
         - dhparam-cache
     tags: nginx
-
-#  - name: "Change the ownership of the owncloud directory"
-#    shell: docker exec "{{ owncloud_container_name }}" chown -R www-data:www-data "{{ owncloud_data }}"
-#    tags : owner
-#
-#  - name: "Complete the installation "
-#    shell: docker exec --user www-data "{{ owncloud_container_name }}" cd "{{ owncloud_data }}" && php occ maintenance:install --database 'mysql' --data-dir '"{{ owncloud_data }}/data"' --database-name '"{{ owncloud_dbname }}"' --database-user 'root' --database-pass '"{{ owncloud_db_root_password }}"' --database-host '"{{ owncloud_dbname }}"' --admin-user '"{{ admin_username }}"' --admin-pass '"{{ admin_password }}"'
-#    tags: installation
-#
-#  - name: "Set trusted domain"
-#    shell: docker exec --user www-data "{{ owncloud_container_name }}" php occ config:system:set trusted_domains 2 --value=owncloud.capitao.fr
-#    tags: domain
